@@ -92,7 +92,7 @@ class Panel1(Panel1_UI):
             # get document
             self.document = desktop.getCurrentComponent()
 
-            self.ExtensionVersion = "0.2.5"
+            self.ExtensionVersion = "0.2.6"
         except Exception as e:
             self.messageBox(
                 f"Error initializing panel: {str(traceback.format_exc())}",
