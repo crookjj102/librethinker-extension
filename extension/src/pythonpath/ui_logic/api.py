@@ -43,16 +43,32 @@ class LtClient:
             base64.urlsafe_b64encode(os.urandom(16)).decode("utf-8").rstrip("=")
         )
 
-    def getBaseHeaders(self):
+    def baseHeaders(self):
         return self.base_headers.copy()
 
     def getAnswer(
         self,
         inputPrompt: str,
         docText: str,
-        apiKey: Optional[str],
-        model: Optional[str],
+        apiKey: str,
+        model: str,
     ) -> Response:
+        CHARACTER_LIMIT = 110_000
+        if len(docText + inputPrompt) > CHARACTER_LIMIT:
+            raise Exception(
+                f"Input text is too long ({len(docText) + len(inputPrompt)} characters).\nPlease reduce the size to under {CHARACTER_LIMIT} characters."
+            )
+
+        if len(model) > 0 and len(apiKey) == 0:
+            raise Exception(
+                "Model ID is provided but API key is missing. Please provide an API key."
+            )
+
+        if len(apiKey) > 0 and len(model) == 0:
+            raise Exception(
+                "API key is provided but Model ID is missing. Please provide a Model ID."
+            )
+
         jobId = self.initJob(
             inputPrompt=inputPrompt, docText=docText, apiKey=apiKey, model=model
         )
@@ -104,28 +120,26 @@ class LtClient:
         self,
         inputPrompt: str,
         docText: str,
-        apiKey: Optional[str],
-        model: Optional[str],
+        apiKey: str,
+        model: str,
     ) -> str:
-        body = json.dumps(
-            {
-                "prompt": inputPrompt,
-                "text": docText,
-                "clientSecret": self.clientSecret,
-                "model": model,
-            }
-        ).encode("utf-8")
+        body = {
+            "prompt": inputPrompt,
+            "text": docText,
+            "clientSecret": self.clientSecret,
+        }
 
-        headers = self.getBaseHeaders()
-        if apiKey is not None:
+        headers = self.baseHeaders()
+        if len(apiKey) > 0 and len(model) > 0:
             headers["X-Third-Party-Key"] = apiKey
+            body["model"] = model
             appendUrl = "byok"
         else:
             appendUrl = "free"
 
         initJobReq = urllib.request.Request(
             self.baseUrl + appendUrl,
-            data=body,
+            data=json.dumps(body).encode("utf-8"),
             method="POST",
             headers=headers,
         )
@@ -145,7 +159,7 @@ class LtClient:
             self.baseUrl + "fetch",
             method="POST",
             data=data,
-            headers=self.getBaseHeaders(),
+            headers=self.baseHeaders(),
         )
 
         with urllib.request.urlopen(jobResultReq, timeout=30) as res:
@@ -159,3 +173,37 @@ class LtClient:
             )
 
         return response
+
+
+class OllamaClient:
+    def getAnswer(
+        self, systemPrompt: str, userPrompt: str, text: str, model: str
+    ) -> Response:
+        try:
+            body = json.dumps(
+                {
+                    "model": model,
+                    "messages": [
+                        {"role": "system", "content": systemPrompt},
+                        {
+                            "role": "user",
+                            "content": f"Instruction:\n{userPrompt}\n\nText:\n{text}",
+                        },
+                    ],
+                }
+            ).encode("utf-8")
+
+            req = urllib.request.Request(
+                "http://localhost:11434/api/chat",
+                data=body,
+                method="POST",
+                headers={"Content-Type": "application/json"},
+            )
+
+            with urllib.request.urlopen(req, timeout=60) as response:
+                data = json.loads(response.read().decode("utf-8"))
+                answer = data["choices"][0]["message"]["content"]
+
+            return Response(success=True, response=answer)
+        except Exception as e:
+            return Response(success=False, message=str(e))

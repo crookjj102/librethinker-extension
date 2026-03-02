@@ -4,3 +4,7 @@ def is_older(v1: str, v2: str) -> bool:
     v2_parts = [int(p) for p in v2.split(".")]
 
     return v1_parts < v2_parts
+
+
+def is_ollama(model: str) -> bool:
+    return model.startswith("sh/ollama/")

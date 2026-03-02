@@ -9,7 +9,7 @@
 
 import uno, tempfile, unohelper
 import os, random, string, threading
-from .utils import is_older
+from .utils import is_older, is_ollama
 
 from .settings import Settings
 import traceback
@@ -92,7 +92,7 @@ class Panel1(Panel1_UI):
             # get document
             self.document = desktop.getCurrentComponent()
 
-            self.ExtensionVersion = "0.2.6"
+            self.ExtensionVersion = "0.2.7"
         except Exception as e:
             self.messageBox(
                 f"Error initializing panel: {str(traceback.format_exc())}",
@@ -171,13 +171,16 @@ class Panel1(Panel1_UI):
         return text_range.getString()
 
     def Submit_OnClick(self):
+        if self.Submit.Enabled is False:
+            return
+
+        self.Submit.Enabled = False
+        self.StatusText.Label = "Loading..."
+
+        threading.Thread(target=self.submit_background).start()
+
+    def submit_background(self):
         try:
-            if self.Submit.Enabled is False:
-                return
-
-            self.StatusText.Label = "Loading..."
-            self.Submit.Enabled = False
-
             docText = (
                 self.get_all_txt()
                 if self.EntireDocumentOption.State
@@ -185,85 +188,61 @@ class Panel1(Panel1_UI):
             )
             inputPrompt = self.DialogContainer.getControl("Prompt").getText()
 
-            CHARACTER_LIMIT = 110_000
-            if len(docText + inputPrompt) > CHARACTER_LIMIT:
-                raise Exception(
-                    f"Input text is too long ({len(docText) + len(inputPrompt)} characters).\nPlease reduce the size to under {CHARACTER_LIMIT} characters."
-                )
+            model: str = self.DialogContainer.getControl("ModelId").getText()
+            if is_ollama(model):
+                # self.generate_self_hosted_response(inputPrompt, docText, model)
+                return
 
-            modelFromEnv = os.environ.get("LT_LLM_MODEL")
-            modelFromInput = self.DialogContainer.getControl("ModelId").getText()
-            model = modelFromInput if len(modelFromInput) > 0 else modelFromEnv
-
-            apiKeyFromEnv = os.environ.get("LT_LLM_API_KEY")
-            apiKeyFromInput = self.DialogContainer.getControl("ModelApiKey").getText()
-            apiKey = apiKeyFromInput if len(apiKeyFromInput) > 0 else apiKeyFromEnv
-
-            if model is not None and apiKey is None:
-                raise Exception(
-                    "Model ID is provided but API key is missing. Please provide an API key."
-                )
-
-            threading.Thread(
-                target=self._submit_background,
-                args=(inputPrompt, docText, model, apiKey),
-            ).start()
+            self.generate_server_response(inputPrompt, docText, model)
 
         except Exception as e:
             self.messageBox(str(e), "Error", ERRORBOX)
             self.StatusText.Label = ""
             self.Submit.Enabled = True
 
-    def _submit_background(
-        self, inputPrompt: str, docText: str, model: str | None, apiKey: str | None
-    ):
-        try:
-            freeModel = apiKey is None and model is None
+    def generate_server_response(self, inputPrompt: str, docText: str, model: str):
+        apiKey: str = self.DialogContainer.getControl("ModelApiKey").getText()
 
-            ltClient = LtClient(extensionVersion=self.ExtensionVersion)
-            answer = ltClient.getAnswer(
-                inputPrompt=inputPrompt, docText=docText, apiKey=apiKey, model=model
+        client = LtClient(extensionVersion=self.ExtensionVersion)
+        answer = client.getAnswer(
+            inputPrompt=inputPrompt, docText=docText, apiKey=apiKey, model=model
+        )
+
+        freeModel = len(apiKey) == 0 and len(model) == 0
+
+        if not answer.success:
+            error_message = "Error getting response."
+            if freeModel:
+                error_message += "\nYou are using the free model which may have issues. Try again later or set up an API key."
+
+            error_message += (
+                f"\nRequest ID: {client.requestId}.\nDetails: {str(answer.message)}"
             )
 
-            if not answer.success:
-                raise Exception(answer.message)
+            raise Exception(error_message)
 
-            self.LatestExtensionVersion = answer.latestExtensionVersion
+        self.LatestExtensionVersion = answer.latestExtensionVersion
 
-            desktop = self.ctx.ServiceManager.createInstanceWithContext(
-                "com.sun.star.frame.Desktop", self.ctx
-            )
-            currentComponent = desktop.getCurrentComponent()
-            selection = currentComponent.CurrentController.getSelection()
-            text_range = selection.getByIndex(0)
-            previous_text = text_range.getString()
-            text_range.setString(previous_text + answer.response)
+        desktop = self.ctx.ServiceManager.createInstanceWithContext(
+            "com.sun.star.frame.Desktop", self.ctx
+        )
+        currentComponent = desktop.getCurrentComponent()
+        selection = currentComponent.CurrentController.getSelection()
+        text_range = selection.getByIndex(0)
+        previous_text = text_range.getString()
+        text_range.setString(previous_text + answer.response)
 
-            label = "Done."
-            if is_older(self.ExtensionVersion, self.LatestExtensionVersion):
-                label += " New version is out, please update."
+        label = "Done."
+        if is_older(self.ExtensionVersion, self.LatestExtensionVersion):
+            label += " New version is out, please update."
 
-            if freeModel:
-                label += " You're using a free model; visit librethinker.com to learn about alternatives."
-            else:
-                label += f" Generated with model {model}."
+        if freeModel:
+            label += " You're using a free model; visit librethinker.com to learn about alternatives."
+        else:
+            label += f" Generated with model {model}."
 
-            self.StatusText.Label = label
-            self.Submit.Enabled = True
-
-        except Exception as e:
-            error = "Error getting answer."
-            if freeModel:
-                error += "\nYou are using the free model which may have issues. Try again later or set up an API key."
-
-            error += f"\nRequest ID: {ltClient.requestId}.\nDetails: {str(e)}"
-
-            # stack_trace = traceback.format_exc()
-            # error += f"\nStack trace:\n{stack_trace}"
-
-            self.messageBox(error, "Error", ERRORBOX)
-            self.StatusText.Label = ""
-            self.Submit.Enabled = True
+        self.StatusText.Label = label
+        self.Submit.Enabled = True
 
     def SaveSettings_OnClick(self):
         try:

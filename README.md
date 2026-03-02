@@ -18,9 +18,9 @@ You can also connect to a wide range of LLM APIs using your own API key.
 
 Go to [LiteLLM's model directory](https://models.litellm.ai/), and find the model that you wish to connect to. Copy its value from the `Model` column - eg `gpt-5.2`, or `mistral/mistral-medium`.
 
-Set the value as the `LT_LLM_MODEL` environment variable in your operating system. Then set the API key as the `LT_LLM_API_KEY` environment variable.
+Go back to the extension, and set the value as the model ID in the Optional Settings section. Then set the API key in that section as well.
 
-Restart LibreOffice Writer. The extension will now use the LLM vendor's API, with your key, to generate the text.
+The extension will now use the LLM vendor's API, with your key, to generate the text.
 
 ## License
 
