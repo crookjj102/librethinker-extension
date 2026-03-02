@@ -174,6 +174,7 @@ class Panel1(Panel1_UI):
         if self.Submit.Enabled is False:
             return
 
+        # Needs to be here as it refreshes the Submit button state
         docText = (
             self.get_all_txt()
             if self.EntireDocumentOption.State
