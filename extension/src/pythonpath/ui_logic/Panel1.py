@@ -174,18 +174,19 @@ class Panel1(Panel1_UI):
         if self.Submit.Enabled is False:
             return
 
+        docText = (
+            self.get_all_txt()
+            if self.EntireDocumentOption.State
+            else self.get_selected_txt()
+        )
+
         self.Submit.Enabled = False
         self.StatusText.Label = "Loading..."
 
-        threading.Thread(target=self.submit_background).start()
+        threading.Thread(target=self.submit_background, args=(docText,)).start()
 
-    def submit_background(self):
+    def submit_background(self, docText: str):
         try:
-            docText = (
-                self.get_all_txt()
-                if self.EntireDocumentOption.State
-                else self.get_selected_txt()
-            )
             inputPrompt = self.DialogContainer.getControl("Prompt").getText()
 
             model: str = self.DialogContainer.getControl("ModelId").getText()
