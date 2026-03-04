@@ -8,3 +8,7 @@ def is_older(v1: str, v2: str) -> bool:
 
 def is_ollama(model: str) -> bool:
     return model.startswith("sh/ollama/")
+
+
+def ollama_model(model: str) -> str:
+    return model[len("sh/ollama/") :]

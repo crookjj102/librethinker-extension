@@ -9,12 +9,14 @@
 
 import uno, tempfile, unohelper
 import os, random, string, threading
-from .utils import is_older, is_ollama
+from .utils import is_older, is_ollama, ollama_model
+from dataclasses import dataclass
+
 
 from .settings import Settings
 import traceback
 
-from .api import LtClient
+from .api import LtClient, OllamaClient
 from com.sun.star.awt.PosSize import POSSIZE
 from com.sun.star.awt.MessageBoxButtons import (
     BUTTONS_OK,
@@ -69,6 +71,12 @@ except:
 # -------------------------------------------------------------------
 
 
+@dataclass
+class Response:
+    answer: str
+    label: str
+
+
 class Panel1(Panel1_UI):
     """
     Class documentation...
@@ -92,7 +100,6 @@ class Panel1(Panel1_UI):
             # get document
             self.document = desktop.getCurrentComponent()
 
-            self.ExtensionVersion = "0.2.7"
         except Exception as e:
             self.messageBox(
                 f"Error initializing panel: {str(traceback.format_exc())}",
@@ -191,21 +198,36 @@ class Panel1(Panel1_UI):
             inputPrompt = self.DialogContainer.getControl("Prompt").getText()
 
             model: str = self.DialogContainer.getControl("ModelId").getText()
-            if is_ollama(model):
-                # self.generate_self_hosted_response(inputPrompt, docText, model)
-                return
 
-            self.generate_server_response(inputPrompt, docText, model)
+            response = (
+                self.server_response(inputPrompt, docText, model)
+                if not is_ollama(model)
+                else self.ollama_response(inputPrompt, docText, ollama_model(model))
+            )
+
+            desktop = self.ctx.ServiceManager.createInstanceWithContext(
+                "com.sun.star.frame.Desktop", self.ctx
+            )
+            currentComponent = desktop.getCurrentComponent()
+            selection = currentComponent.CurrentController.getSelection()
+            text_range = selection.getByIndex(0)
+            previous_text = text_range.getString()
+            text_range.setString(previous_text + response.answer)
+
+            self.StatusText.Label = response.label
 
         except Exception as e:
             self.messageBox(str(e), "Error", ERRORBOX)
             self.StatusText.Label = ""
+        finally:
             self.Submit.Enabled = True
 
-    def generate_server_response(self, inputPrompt: str, docText: str, model: str):
+    def server_response(self, inputPrompt: str, docText: str, model: str) -> Response:
+        extensionVersion = "0.2.7"
+
         apiKey: str = self.DialogContainer.getControl("ModelApiKey").getText()
 
-        client = LtClient(extensionVersion=self.ExtensionVersion)
+        client = LtClient(extensionVersion=extensionVersion)
         answer = client.getAnswer(
             inputPrompt=inputPrompt, docText=docText, apiKey=apiKey, model=model
         )
@@ -223,19 +245,8 @@ class Panel1(Panel1_UI):
 
             raise Exception(error_message)
 
-        self.LatestExtensionVersion = answer.latestExtensionVersion
-
-        desktop = self.ctx.ServiceManager.createInstanceWithContext(
-            "com.sun.star.frame.Desktop", self.ctx
-        )
-        currentComponent = desktop.getCurrentComponent()
-        selection = currentComponent.CurrentController.getSelection()
-        text_range = selection.getByIndex(0)
-        previous_text = text_range.getString()
-        text_range.setString(previous_text + answer.response)
-
         label = "Done."
-        if is_older(self.ExtensionVersion, self.LatestExtensionVersion):
+        if is_older(extensionVersion, answer.latestExtensionVersion):
             label += " New version is out, please update."
 
         if freeModel:
@@ -243,8 +254,18 @@ class Panel1(Panel1_UI):
         else:
             label += f" Generated with model {model}."
 
-        self.StatusText.Label = label
-        self.Submit.Enabled = True
+        return Response(answer=answer.response, label=label)
+
+    def ollama_response(self, userPrompt: str, text: str, model: str) -> Response:
+        client = OllamaClient()
+        answer = client.getAnswer(userPrompt=userPrompt, text=text, model=model)
+        if not answer.success:
+            error_message = (
+                f"Error getting response from Ollama.\nDetails: {str(answer.message)}"
+            )
+            raise Exception(error_message)
+        label = f"Done. Generated with Ollama model {model}."
+        return Response(answer=answer.response, label=label)
 
     def SaveSettings_OnClick(self):
         try:
@@ -309,6 +330,7 @@ g_exportedScripts = (Run_Panel1,)
 # -------------------------------------
 # HELPER FOR AN IDE
 # -------------------------------------
+
 
 if __name__ == "__main__":
     """Connect to LibreOffice proccess.

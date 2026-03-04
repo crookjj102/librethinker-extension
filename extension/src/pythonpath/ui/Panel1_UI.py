@@ -178,7 +178,7 @@ class Panel1_UI(unohelper.Base, XActionListener, XWindowListener, XJobExecutor):
         self.SettingsSectionHeading.PositionY = self.FeedbackPrompt.PositionY + 40
         self.SettingsSectionHeading.Width = 136
         self.SettingsSectionHeading.Height = 15
-        self.SettingsSectionHeading.Label = "--OPTIONAL SETTINGS--"
+        self.SettingsSectionHeading.Label = "--BYOK/OLLAMA SETTINGS--"
 
         self.DialogModel.insertByName(
             "SettingsSectionHeading", self.SettingsSectionHeading

@@ -19,8 +19,15 @@ class JobResult:
 
 
 @dataclass
-class Response:
+class LtClientResponse:
     latestExtensionVersion: str
+    success: bool
+    response: str = ""
+    message: str = ""
+
+
+@dataclass
+class OllamaClientResponse:
     success: bool
     response: str = ""
     message: str = ""
@@ -52,7 +59,7 @@ class LtClient:
         docText: str,
         apiKey: str,
         model: str,
-    ) -> Response:
+    ) -> LtClientResponse:
         CHARACTER_LIMIT = 110_000
         if len(docText + inputPrompt) > CHARACTER_LIMIT:
             raise Exception(
@@ -93,7 +100,7 @@ class LtClient:
 
             result = self.getJobResult(jobId)
             if result.status == "successful":
-                return Response(
+                return LtClientResponse(
                     response=result.response,
                     latestExtensionVersion=result.latestExtensionVersion,
                     success=True,
@@ -104,13 +111,13 @@ class LtClient:
                 if len(result.statusInfo) > 0:
                     message += " " + result.statusInfo
 
-                return Response(
+                return LtClientResponse(
                     latestExtensionVersion=result.latestExtensionVersion,
                     success=False,
                     message=message,
                 )
 
-        return Response(
+        return LtClientResponse(
             latestExtensionVersion=result.latestExtensionVersion,
             success=False,
             message="LLM took too long to answer.",
@@ -176,15 +183,17 @@ class LtClient:
 
 
 class OllamaClient:
-    def getAnswer(
-        self, systemPrompt: str, userPrompt: str, text: str, model: str
-    ) -> Response:
+    def getAnswer(self, userPrompt: str, text: str, model: str) -> OllamaClientResponse:
         try:
             body = json.dumps(
                 {
                     "model": model,
+                    "stream": False,
                     "messages": [
-                        {"role": "system", "content": systemPrompt},
+                        {
+                            "role": "system",
+                            "content": "This content is from a LibreOffice Writer document. You are a helpful assistant that helps the user edit the document as requested.",
+                        },
                         {
                             "role": "user",
                             "content": f"Instruction:\n{userPrompt}\n\nText:\n{text}",
@@ -202,8 +211,8 @@ class OllamaClient:
 
             with urllib.request.urlopen(req, timeout=60) as response:
                 data = json.loads(response.read().decode("utf-8"))
-                answer = data["choices"][0]["message"]["content"]
+                answer = data["message"]["content"]
 
-            return Response(success=True, response=answer)
+            return OllamaClientResponse(success=True, response=answer)
         except Exception as e:
-            return Response(success=False, message=str(e))
+            return OllamaClientResponse(success=False, message=str(e))
