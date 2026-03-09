@@ -10,7 +10,7 @@ You can use a free online LLM (no signup required), locally self-hosted Ollama, 
 
 ## Quickstart
 
-Download the latest extension file (.oxt) from the [LibreOffice extension directory](https://extensions.libreoffice.org/en/extensions/show/99471). Open LibreOffice Writer, go to *Tools > Extension Manager > Add*, and select the downloaded .oxt file to install.
+Download the latest extension file (.oxt) from the [releases page](https://github.com/mihailthebuilder/librethinker-extension/releases/). Open LibreOffice Writer, go to *Tools > Extension Manager > Add*, and select the downloaded .oxt file to install.
 
 Open the sidebar in LibreOffice; you should see the lightbulb icon for the extension. Click the icon to open the extension panel, then you're ready to start using the free model!
 
